@@ -436,3 +436,20 @@ FeedB_OuterTile_N:
     }
   }
 }
+
+void DoubleStreamX(Stream<ComputePackN_t> &xIn,
+                   Stream<ComputePackN_t> &xOut1,
+                   Stream<ComputePackN_t> &xOut2) {
+  // TODO
+  // Check correctness
+  
+  const auto xVal = xIn.Pop();
+  ComputePackN_t pack1, pack2;
+  pack1[0] = xVal.Get(0);
+  pack2[0] = xVal.Get(0);
+  #ifndef MM_SYNTHESIS
+    std::cerr << "xVal = " << xVal << "\n";
+  #endif
+  xOut1.Push(pack1);
+  xOut2.Push(pack2);
+}

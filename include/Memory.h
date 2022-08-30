@@ -66,3 +66,10 @@ void ConvertWidthC(Stream<OutputPack_t> &narrow, Stream<MemoryPackM_t> &wide,
 
 void WriteC(Stream<MemoryPackM_t> &pipe, MemoryPackM_t memory[], unsigned n,
             unsigned k, unsigned m);
+
+// TODO
+// Select better pack size
+
+void DoubleStreamX(Stream<ComputePackN_t> &xIn,
+                   Stream<ComputePackN_t> &xOut1,
+                   Stream<ComputePackN_t> &xOut2);
