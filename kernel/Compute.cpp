@@ -52,19 +52,23 @@ InitializeABuffer_Inner:
 
 OuterTile_N:
   for (unsigned n0 = 0; n0 < OuterTilesN(size_n); ++n0) {
+#pragma HLS loop_tripcount max=32
   OuterTile_M:
     for (unsigned m0 = 0; m0 < OuterTilesM(size_m); ++m0) {
+#pragma HLS loop_tripcount max=1024
 
       // We do not tile K further, but loop over the entire outer tile here
     Collapse_K:
       for (unsigned k = 0; k < size_k; ++k) {
         // Begin outer tile ---------------------------------------------------
-
+#pragma HLS loop_tripcount max=1024
       Pipeline_N:
         for (unsigned n1 = 0; n1 < kInnerTilesN; ++n1) {
+#pragma HLS loop_tripcount max=8
 
         Pipeline_M:
           for (unsigned m1 = 0; m1 < kInnerTilesM; ++m1) {
+#pragma HLS loop_tripcount max=256
 
             // Begin compute tile ---------------------------------------------
             #pragma HLS PIPELINE II=1
@@ -229,3 +233,130 @@ OuterTile_N:
     }
   }
 }
+
+void DiscretizeX(Stream<ComputePackN_t> &xIn,
+                 Stream<ComputePackN_t> &xBoolOut) {
+  auto xVal = xIn.Pop();
+  #ifndef MM_SYNTHESIS
+    std::cerr << "xVal = " << xVal << "\n";
+  #endif
+  ComputePackN_t pack;
+  for (unsigned w = 0; w < ComputePackN_t::kWidth; ++w) {
+    #pragma HLS PIPELINE II=1
+    #pragma HLS LOOP_FLATTEN
+    pack[w] = xVal.Get(w) > 0;
+  }
+  xBoolOut.Push(pack);
+}
+
+void UpdateY1(Stream<ComputePackN_t> &xIn,
+              Stream<ComputePackN_t> &xOut,
+              Stream<ComputePackN_t> &yIn,
+              Stream<ComputePackN_t> &yOut,
+              Data_t da) {
+  const auto xVal = xIn.Pop();
+  const auto yVal = yIn.Pop();
+  #ifndef MM_SYNTHESIS
+    std::cerr << "UpdateY1: xVal = " << xVal.Get(0) << "\n";
+  #endif
+  xOut.Push(xVal);
+  ComputePackN_t pack;
+  for (unsigned w = 0; w < ComputePackN_t::kWidth; ++w) {
+    #pragma HLS PIPELINE II=1
+    #pragma HLS LOOP_FLATTEN
+    pack[w] = yVal.Get(w) + xVal.Get(w) * da;
+  }
+  yOut.Push(pack);
+}
+
+void UpdateY2(Stream<ComputePackN_t> &jxIn,
+              Stream<ComputePackN_t> &yIn,
+              Stream<ComputePackN_t> &yOut,
+              Data_t c0,
+              Data_t dt) {
+  const auto jxVal = jxIn.Pop();
+  const auto yVal = yIn.Pop();
+  ComputePackN_t pack;
+  for (unsigned w = 0; w < ComputePackN_t::kWidth; ++w) {
+    #pragma HLS PIPELINE II=1
+    #pragma HLS LOOP_FLATTEN
+    pack[w] = jxVal.Get(w) * c0 * dt + yVal.Get(w);
+  }
+  #ifndef MM_SYNTHESIS
+    std::cerr << "UpdateY2: pack = " << pack << "\n";
+  #endif
+  yOut.Push(pack);
+}
+
+void UpdateX(Stream<ComputePackN_t> &xIn,
+             Stream<ComputePackN_t> &xOut,
+             Stream<ComputePackN_t> &yIn,
+             Stream<ComputePackN_t> &yOut,
+             Data_t dt) {
+  const auto yVal = yIn.Pop();
+  yOut.Push(yVal);
+  xOut.Push(xIn.Pop() + yVal * dt);
+}
+
+void Bound(Stream<ComputePackN_t> &xIn,
+           Stream<ComputePackN_t> &xOut,
+           Stream<ComputePackN_t> &yIn,
+           Stream<ComputePackN_t> &yOut) {
+  const auto xVal = xIn.Pop();
+  if (xVal > 1) {
+    xOut.Push(1);
+    yOut.Push(0);
+  } else if (xVal < -1) {
+    xOut.Push(-1);
+    yOut.Push(0);
+  } else {
+    xOut.Push(xVal);
+    yOut.Push(yIn.Pop());
+  }
+}
+
+/*
+typedef union {
+    unsigned int u;
+    float f;
+} ap32;
+
+void SimulatedBifurcationOptimizer::matrixVectorProduct(int blockNum, unsigned short blockSize) {
+    // TODO: blockSize tells the program how many _signOfX should we get
+Multiply_matrix:
+    for (unsigned int i = 0; i < CACHE_FACTOR; ++i) {
+    Multiply_rows:
+        for (unsigned int j = 0; j < CACHE_FACTOR; ++j) {
+            ap32 temp = {0};
+            temp.f = _jCache[i][j];
+            ap_uint<32> tempu = temp.u;
+            // Flip the sign bit when sign of x is -1 (0)
+            tempu[31] = tempu[31] ^ !(_signOfX[blockNum * CACHE_FACTOR + j]);
+            temp.u = tempu;
+            if (i == 0)
+                _productCache[j] = temp.f;
+            else
+                _productCache[j] += temp.f;
+        }
+    }
+}
+*/
+
+
+/*
+void SimulatedBifurcationOptimizer::packSolution(unsigned int * solution_uint, bool * solution_bool) {
+Copy_solution_blocks:
+    for (int i = 0; i < _qubits / 32; ++i) {
+#pragma HLS loop_tripcount min=2 max=32
+        ap_uint<32> u = {0};
+    Copy_spins:
+        for (int j = 0; j < 32; ++j) {
+            u[j] = solution_bool[32 * i + j];
+        }
+#ifndef __SYNTHESIS__
+        std::cout << "u = " << u << "\n";
+#endif
+        solution_uint[i] = u;
+    }
+}
+*/

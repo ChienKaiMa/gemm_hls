@@ -169,3 +169,18 @@ void MatrixMultiplicationKernel(MemoryPackK_t const a[],
 );
 
 }
+
+extern "C" {
+
+void SimulatedBifurcationKernel(MemoryPackN_t isingJ[], MemoryPackM_t x[], MemoryPackM_t y[],
+                                Data_t const delta_a[], const Data_t c0, const Data_t dt,
+                                const unsigned int numOfQubits, const unsigned short numOfSteps,
+                                unsigned int solution[], Data_t x_history[]
+);
+
+void SimulatedBifurcationStep(MemoryPackN_t isingJ[], MemoryPackM_t x[], MemoryPackM_t y[],
+                              const Data_t delta_a, const Data_t c0, const Data_t dt,
+                              const unsigned int numOfQubits
+);
+
+}

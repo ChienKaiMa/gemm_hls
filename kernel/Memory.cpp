@@ -449,6 +449,8 @@ void DoubleStreamX(Stream<ComputePackN_t> &xIn,
   pack2[0] = xVal.Get(0);
   #ifndef MM_SYNTHESIS
     std::cerr << "xVal = " << xVal << "\n";
+    std::cerr << "pack1 = " << pack1 << "\n";
+    std::cerr << "pack2 = " << pack2 << "\n";
   #endif
   xOut1.Push(pack1);
   xOut2.Push(pack2);
