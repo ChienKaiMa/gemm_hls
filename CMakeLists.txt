@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.0)
 project(sdaccel_mm)
 
 # Target options 
-set(MM_PLATFORM "xilinx_u250_gen3x16_xdma_3_1_202020_1" CACHE STRING "Platform string for Vitis.")
+set(MM_PLATFORM "xilinx_u50_gen3x16_xdma_201920_3" CACHE STRING "Platform string for Vitis.")
 set(MM_TARGET_CLOCK "" CACHE STRING "Target clock for kernel (uses default is left empty).")
 set(MM_ENABLE_PROFILING OFF CACHE BOOL "Collect profiling information.")
 set(MM_ENABLE_DEBUGGING OFF CACHE BOOL "Inject debugging cores to design.")
@@ -17,7 +17,7 @@ set(MM_ENABLE_BLAS ON CACHE BOOL "Use BLAS library for validation if available."
 set(MM_DATA_TYPE "float" CACHE STRING "Matrix data type.")
 set(MM_MEMORY_BUS_WIDTH_N 64 CACHE STRING "Width of memory bus in bytes in N.")
 set(MM_MEMORY_BUS_WIDTH_K 64 CACHE STRING "Width of memory bus in bytes in K.")
-set(MM_MEMORY_BUS_WIDTH_M 64 CACHE STRING "Width of memory bus in bytes in M.")
+set(MM_MEMORY_BUS_WIDTH_M 4 CACHE STRING "Width of memory bus in bytes in M.")
 set(MM_DYNAMIC_SIZES ON CACHE BOOL "Use dynamic matrix dimension sizes.")
 set(MM_SIZE_N 512 CACHE STRING "Size of matrix dimension.")
 set(MM_SIZE_K 512 CACHE STRING "Size of matrix dimension.")
@@ -25,9 +25,9 @@ set(MM_SIZE_M 512 CACHE STRING "Size of matrix dimension.")
 set(MM_MEMORY_TILE_SIZE_N 256 CACHE STRING "Tile size of outer memory tile in N.")
 set(MM_MEMORY_TILE_SIZE_M 256 CACHE STRING "Tile size of outer memory tile in M.")
 set(MM_PARALLELISM_N 32 CACHE STRING "Number of parallel compute in N.")
-set(MM_PARALLELISM_M 8 CACHE STRING "Number of parallel compute in M.")
+set(MM_PARALLELISM_M 1 CACHE STRING "Number of parallel compute in M.")
 # set(MM_GRANULARITY_N 1 CACHE STRING "Granularity of processing elements in N.")
-set(MM_TRANSPOSED_A OFF CACHE BOOL "Assume the input matrix A is transposed.")
+set(MM_TRANSPOSED_A ON CACHE BOOL "Assume the input matrix A is transposed.")
 set(MM_TRANSPOSE_WIDTH 64 CACHE STRING "Burst width when transposing reads from A.")
 set(MM_TWO_DIMMS OFF CACHE BOOL "Use two DDR DIMMs instead of one")
 set(MM_MAP_OP "Multiply" CACHE STRING "Map operation to perform between A and B matrices.")
@@ -36,7 +36,7 @@ set(MM_ADD_RESOURCE OFF CACHE STRING "")
 set(MM_MULT_RESOURCE OFF CACHE STRING "")  
 
 # Internal
-set(MM_KERNEL_NAME MatrixMultiplicationKernel)
+set(MM_KERNEL_NAME SimulatedBifurcationKernel)
 include(CheckTypeSize)
 check_type_size(${MM_DATA_TYPE} MM_DATA_WIDTH_${MM_DATA_TYPE})
 if(NOT MM_DATA_WIDTH_${MM_DATA_TYPE}) # Non-primitive data type
@@ -147,7 +147,7 @@ target_link_libraries(mmkernel ${CMAKE_THREAD_LIBS_INIT})
 add_executable(PrintSpecifications src/PrintSpecifications.cpp)
 
 # Software test
-add_executable(TestSimulation test/TestSimulation.cpp)
+add_executable(TestSimulation test/TestSimulation.cpp test/numberpartition.cpp test/numberpartition.hpp)
 target_link_libraries(TestSimulation ${Vitis_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${BLAS_LIBRARIES} ${Vitis_LIBRARIES} mmkernel)
 if(MM_DATA_TYPE STREQUAL "half")
   target_link_libraries(TestSimulation ${Vitis_FLOATING_POINT_LIBRARY})
@@ -176,14 +176,14 @@ if(MM_MULT_RESOURCE)
 endif() 
 
 if(MM_TWO_DIMMS)
-  set(MM_PORT_MAPPING m_axi_gmem0:DDR[0] m_axi_gmem1:DDR[1] m_axi_gmem2:DDR[1])
+  set(MM_PORT_MAPPING m_axi_gmem0:HBM[0] m_axi_gmem1:HBM[1] m_axi_gmem2:HBM[1])
 else()
-  set(MM_PORT_MAPPING m_axi_gmem0:DDR[1] m_axi_gmem1:DDR[1] m_axi_gmem2:DDR[1])
+  set(MM_PORT_MAPPING m_axi_gmem0:HBM[1] m_axi_gmem1:HBM[1] m_axi_gmem2:HBM[1])
 endif()
 
 # Hardware kernel
 add_vitis_kernel(MatrixMultiplication
-                 KERNEL "MatrixMultiplicationKernel"
+                 KERNEL "SimulatedBifurcationKernel"
                  FILES ${MM_KERNEL_SRC}
                  HLS_FLAGS ${MM_SYNTHESIS_FLAGS}
                  INCLUDE_DIRS include
