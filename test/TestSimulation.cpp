@@ -1,5 +1,10 @@
-/// @author    Johannes de Fine Licht (definelicht@inf.ethz.ch)
-/// @copyright This software is copyrighted under the BSD 3-Clause License.
+
+// #include "simulatedBifurcationOptimizer.hpp"
+#include "numberpartition.hpp"
+#include <ctime>
+#include <fstream>
+#include <string>
+#include <sstream>
 
 #include <algorithm>
 #include <cmath>
@@ -10,87 +15,113 @@
 #include "MatrixMultiplication.h"
 #include "Utility.h"
 
-int main(int argc, char **argv) {
-#ifdef MM_DYNAMIC_SIZES
-  if (argc < 4 || argc > 4) {
-    std::cerr << "Usage: ./TestSimulation N K M" << std::endl;
-    return 1;
-  }
-  const unsigned size_n = std::stoul(argv[1]);
-  const unsigned size_k = std::stoul(argv[2]);
-  const unsigned size_m = std::stoul(argv[3]);
-  if (size_k % kMemoryWidthK != 0) {
-    std::cerr << "K must be divisable by memory width." << std::endl;
-    return 1;
-  }
-#ifndef MM_TRANSPOSED_A
-  if (size_k % kTransposeWidth != 0) {
-    std::cerr << "K must be divisable by the transpose width." << std::endl;
-    return 1;
-  }
-#endif
-  if (size_m % kMemoryWidthM != 0) {
-    std::cerr << "M must be divisable by memory width." << std::endl;
-    return 1;
-  }
-#else
-  constexpr auto size_n = kSizeN;
-  constexpr auto size_k = kSizeK;
-  constexpr auto size_m = kSizeM;
-#endif
+int main(int argc, char *argv[])
+{
+    auto timer = std::time(nullptr);
+    auto start_time = std::localtime(&timer);
+    std::cerr << std::put_time(start_time, "%Y-%m-%d %T");
+    std::cerr << " Test starts.\n";
 
-  std::vector<Data_t> a(size_n * size_k);
-  std::vector<Data_t> b(size_k * size_m);
-  std::vector<Data_t> cReference(size_n * size_m, 0);
+    // --Read problem information--
+    //std::string problemFilePath = "num_par_32_ising_0.txt";
+    std::string problemFilePath = "num_par_32_ising_0.txt";
+    if (argc == 2) problemFilePath = argv[1];
 
-  std::default_random_engine rng(kSeed);
-  typename std::conditional<std::is_integral<Data_t>::value,
-                            std::uniform_int_distribution<unsigned long>,
-                            std::uniform_real_distribution<double>>::type
-      dist(1, 10);
+    std::vector<float> Q_flatten;
+    std::vector<std::vector<float>> Q;
+    NumberPartitionProblem problem = NumberPartitionProblem(problemFilePath, Q_flatten, Q);
 
-  std::for_each(a.begin(), a.end(),
-                [&dist, &rng](Data_t &in) { in = Data_t(dist(rng)); });
-  std::for_each(b.begin(), b.end(),
-                [&dist, &rng](Data_t &in) { in = Data_t(dist(rng)); });
+    auto timer1 = std::time(nullptr);
+    auto read_time = std::localtime(&timer1);
+    std::cerr << std::put_time(read_time, "%Y-%m-%d %T");
+    std::cerr << " Read problem information done.\n";
 
-  const auto aKernel = Pack<kMemoryWidthA>(a);
-  const auto bKernel = Pack<kMemoryWidthM>(b);
-  auto cKernel = Pack<kMemoryWidthM>(cReference);
+    // TODO: Measure problem read time
 
-  ReferenceImplementation(a.data(), b.data(), cReference.data(), size_n, size_k,
-                          size_m);
-
-  std::cout << "Running simulation...\n" << std::flush;
-#ifdef MM_DYNAMIC_SIZES
-  MatrixMultiplicationKernel(aKernel.data(), bKernel.data(), cKernel.data(),
-                             size_n, size_k, size_m);
-#else
-  MatrixMultiplicationKernel(aKernel.data(), bKernel.data(), cKernel.data());
-#endif
-  std::cout << "Verifying results...\n" << std::flush;
-
-  const auto cTest = Unpack<kMemoryWidthM>(cKernel);
-
-  for (unsigned i = 0; i < size_n; ++i) {
-    for (unsigned j = 0; j < size_m; ++j) {
-      const auto testVal = make_signed<Data_t>(cTest[i * size_m + j]);
-      const auto refVal = make_signed<Data_t>(cReference[i * size_m + j]);
-      const Data_t diff = std::abs(testVal - refVal);
-      bool mismatch;
-      if (std::is_floating_point<Data_t>::value) {
-        mismatch = diff / refVal > static_cast<Data_t>(1e-3);
-      } else {
-        mismatch = diff != 0;
-      }
-      if (mismatch) {
-        std::cerr << "Mismatch at (" << i << ", " << j << "): " << testVal
-                  << " vs. " << refVal << "\n";
-        return 1;
-      }
+    /*
+    ** Simulated bifurcation algorithm setup
+    */
+    int steps = 200;
+    float dt = 0.01;
+    float c0 = 0.001;
+    uint problem_size = problem.getProblemSize();
+    uint matrix_size = problem.getMatrixSize();
+    std::vector<float> x(matrix_size, 0);
+    std::vector<float> y(matrix_size, 0);
+    for (int i = 0; i < matrix_size; ++i) {
+        y[i] = 0.05;
     }
-  }
-  std::cout << "Matrix-matrix multiplication successfully verified.\n";
 
-  return 0;
+    for (int i = 0; i < matrix_size; ++i) {
+        for (int j = 0; j < matrix_size; ++j) {
+            std::cerr << Q_flatten[i * matrix_size + j] << " ";
+        }
+        std::cerr << "\n";
+    }
+
+    uint best_spin[matrix_size / 32] = {0};
+    float myC0 = 4.2479e-06;
+    float myDT = 0.01;
+
+    float delta_a[steps];
+    for (int i = 0; i < steps; ++i)
+    {
+        delta_a[i] = float(steps - i) / steps;
+    }
+    float x_history[matrix_size * steps]{0};
+
+    auto jKernel = Pack<kMemoryWidthA>(Q_flatten);
+    auto xKernel = Pack<kMemoryWidthM>(x);
+    auto yKernel = Pack<kMemoryWidthM>(y);
+    // auto cKernel = Pack<kMemoryWidthM>(cReference);
+
+
+    auto t1 = clock();
+    SimulatedBifurcationKernel(jKernel.data(), xKernel.data(), yKernel.data(), delta_a, myC0, myDT, matrix_size, steps, best_spin, x_history);
+    auto t2 = clock();
+    
+    auto timer2 = std::time(nullptr);
+    auto execute_time = std::localtime(&timer2);
+    std::cerr << std::put_time(execute_time, "%Y-%m-%d %T") << " Simulated bifurcation done.\n";
+    std::cout << "Execution time = " << ((float)(t2 - t1))/CLOCKS_PER_SEC << " seconds.\n\n";
+
+
+    //
+    // Direct SBM history (x) to file
+    //
+    std::cout << "---Dumping x history---\n";
+    std::ofstream x_outfile;
+    std::ofstream energy_outfile;
+    // outfile.open(argv[2], std::ios::out);
+    // TODO
+    // Wrap the utilities in functions
+    x_outfile.open("x_history.log", std::ios::out);
+
+    for (int i = 0; i < steps; ++i)
+    {
+        for (int j = 0; j < matrix_size; ++j)
+        {
+            x_outfile << x_history[i * matrix_size + j] << " ";
+        }
+        x_outfile << "\n";
+    }
+
+    std::cout << "---Dumping x history done---\n\n";
+
+    //
+    // SBM summary
+    //
+
+    // TODO
+    // Save the report as file
+    std::cout << "---SBM summary---\n";
+    std::cout << "Final spin: ";
+    for (int i = 0; i < (matrix_size / 32); ++i)
+    {
+        ap_uint<32> u = best_spin[i];
+        for (int j = 0; j < 32; ++j) {
+            std::cout << u[j] << " ";
+        }
+    }
+    std::cout << "\n";
 }
