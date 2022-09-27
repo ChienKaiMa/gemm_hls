@@ -1,3 +1,12 @@
+Scalable Simulated Bifurcation inspired by gemm_hls
+=============================================
+- [x] C synthesis
+- [ ] C simulation
+- [ ] Hardware emulation
+- [x] Mat-vec multiplication C simulation
+- [x] Mat-vec multiplication hardware emulation
+
+
 Scalable matrix matrix multiplication on FPGA
 =============================================
 
